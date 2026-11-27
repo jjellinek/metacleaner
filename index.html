@@ -1,0 +1,621 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Photo Scrubber</title>
+<meta name="description" content="See and remove hidden photo metadata — AI tags, device info, location — on your own device.">
+<meta name="theme-color" content="#0d7a6c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Scrubber">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon-192.png">
+<style>
+:root{
+  --bg:#f3f1ea; --surface:#ffffff; --surface-2:#eae6db; --border:#d9d3c2;
+  --text:#201f1a; --muted:#6c6657; --accent:#0d7a6c; --accent-ink:#ffffff;
+  --flag-ai:#a8350f; --flag-ai-bg:#fbe7de; --flag-id:#8a6207; --flag-id-bg:#f6ecd0;
+  --flag-loc:#1d5fa8; --flag-loc-bg:#e1ecf8;
+  --font-body:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  --font-mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#13160f; --surface:#1b1f17; --surface-2:#222719; --border:#343b28;
+    --text:#edeee6; --muted:#9a9c89; --accent:#3bc9ab; --accent-ink:#06211c;
+    --flag-ai:#ff8f6b; --flag-ai-bg:#3a2016; --flag-id:#e8bd4e; --flag-id-bg:#332c13;
+    --flag-loc:#7db3ef; --flag-loc-bg:#172838;
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--bg); color:var(--text); font:15px/1.45 var(--font-body);
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+  padding-left:max(16px, env(safe-area-inset-left,0px)); padding-right:max(16px, env(safe-area-inset-right,0px));
+}
+img{max-width:100%}
+[hidden]{display:none!important}
+.wrap{max-width:980px; margin:0 auto; padding-block:1.75rem 3rem; display:flex; flex-direction:column; gap:1.25rem}
+h1,h2,h3{margin:0; letter-spacing:-0.01em; text-wrap:balance}
+.hero{display:flex; flex-direction:column; gap:.5rem}
+.hero h1{font-size:1.6rem; font-weight:750}
+.hero p{margin:0; color:var(--muted); max-width:62ch}
+.pill{
+  display:inline-flex; align-items:center; gap:.45rem; align-self:flex-start;
+  background:var(--surface-2); border:1px solid var(--border); border-radius:999px; padding:.3rem .7rem; font-size:.78rem;
+}
+.pill svg{width:14px; height:14px; color:var(--accent); flex:none}
+
+.dropzone{
+  border:1.5px dashed var(--border); border-radius:14px; background:var(--surface);
+  padding:2.2rem 1.25rem; text-align:center; display:flex; flex-direction:column; align-items:center; gap:.8rem; cursor:pointer;
+}
+.dropzone.drag{border-color:var(--accent); background:var(--surface-2)}
+.dropzone svg{width:34px; height:34px; color:var(--muted)}
+.dropzone h2{font-size:1.05rem}
+.dropzone p{margin:0; color:var(--muted); font-size:.88rem}
+input[type=file]{display:none}
+
+.btn{
+  font:600 .95rem var(--font-body); border-radius:10px; border:1px solid transparent; padding:.75rem 1.2rem; cursor:pointer;
+  display:inline-flex; align-items:center; justify-content:center; gap:.5rem; color:inherit; -webkit-tap-highlight-color:transparent;
+}
+.btn:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+.btn-primary{background:var(--accent); color:var(--accent-ink)}
+.btn-primary:disabled{opacity:.5; cursor:not-allowed}
+.btn-ghost{background:transparent; border-color:var(--border)}
+.btn-ghost:active{background:var(--surface-2)}
+
+.file-bar{
+  display:flex; justify-content:space-between; align-items:center; gap:.75rem; flex-wrap:wrap;
+  background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:.65rem .9rem;
+}
+.file-bar .meta{display:flex; flex-direction:column; min-width:0}
+.file-bar .name{font-weight:600; overflow-wrap:anywhere}
+.file-bar .stat{font-family:var(--font-mono); font-size:.75rem; color:var(--muted)}
+
+.grid2{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.3fr); gap:1.25rem}
+@media (max-width:760px){ .grid2{grid-template-columns:1fr} }
+.card{background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:1rem; min-width:0}
+.preview img{display:block; width:100%; max-height:420px; object-fit:contain; border-radius:9px; background:var(--surface-2)}
+.summary{margin-top:.9rem; display:flex; flex-direction:column; gap:.45rem; font-size:.88rem}
+.summary .line{display:flex; align-items:baseline; gap:.55rem}
+.dot{width:9px; height:9px; border-radius:50%; flex:none; transform:translateY(-1px)}
+.c2pa{
+  margin-top:.9rem; border:1px solid var(--flag-ai); background:var(--flag-ai-bg); color:var(--flag-ai);
+  border-radius:10px; padding:.7rem .85rem; font-size:.84rem;
+}
+
+.ledger h3{font-size:1rem; margin-bottom:.4rem}
+details{border-bottom:1px solid var(--border)}
+details:last-of-type{border-bottom:none}
+summary{
+  cursor:pointer; list-style:none; padding:.65rem 0; display:flex; justify-content:space-between; align-items:center; font-weight:600; font-size:.9rem;
+}
+summary::-webkit-details-marker{display:none}
+summary .count{font-family:var(--font-mono); font-weight:400; color:var(--muted); font-size:.78rem; margin-left:auto; margin-right:.6rem}
+summary::after{content:"+"; font-family:var(--font-mono); color:var(--muted)}
+details[open] summary::after{content:"\2212"}
+.row{
+  display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) auto; gap:.6rem; align-items:baseline;
+  padding:.4rem 0; border-top:1px solid var(--border); font-size:.82rem;
+}
+.row .k{font-family:var(--font-mono); color:var(--muted); overflow-wrap:anywhere}
+.row .v{font-family:var(--font-mono); overflow-wrap:anywhere}
+.badge{font-size:.66rem; font-weight:700; letter-spacing:.03em; text-transform:uppercase; border-radius:999px; padding:.16rem .48rem; white-space:nowrap}
+.b-ai{background:var(--flag-ai-bg); color:var(--flag-ai)}
+.b-id{background:var(--flag-id-bg); color:var(--flag-id)}
+.b-loc{background:var(--flag-loc-bg); color:var(--flag-loc)}
+.empty{color:var(--muted); font-size:.88rem; padding:.4rem 0}
+
+.actionbar{
+  display:flex; flex-direction:column; gap:.85rem;
+  background:var(--surface-2); border:1px solid var(--border); border-radius:12px; padding:1rem;
+}
+.after{display:flex; flex-wrap:wrap; gap:.5rem 1.25rem; font-size:.88rem}
+.after b{font-family:var(--font-mono)}
+.option{display:flex; gap:.55rem; align-items:flex-start; font-size:.85rem; color:var(--muted)}
+.option input{margin-top:.2rem; accent-color:var(--accent); width:18px; height:18px; flex:none}
+.option strong{color:var(--text); font-weight:600}
+.actions{display:flex; gap:.6rem; flex-wrap:wrap}
+.actions .btn-primary{flex:1 1 220px}
+.status{font-size:.88rem; min-height:1.2em}
+.status.err{color:var(--flag-ai)}
+.status.ok{color:var(--accent)}
+
+.howto{font-size:.82rem; color:var(--muted)}
+.howto summary{font-size:.85rem; color:var(--text)}
+.howto ol{margin:.2rem 0 .8rem; padding-left:1.2rem}
+footer{color:var(--muted); font-size:.76rem; text-align:center}
+@media (prefers-reduced-motion: no-preference){ .btn{transition:transform .08s} .btn:active{transform:scale(.98)} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <h1>Photo Scrubber</h1>
+    <p>See what a photo is quietly carrying (AI tags, editing apps, phone model, location) and save a clean copy without it.</p>
+    <span class="pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l7 3v5c0 5-3.5 8-7 9-3.5-1-7-4-7-9V6l7-3z"/></svg>Your photos never leave this device</span>
+  </header>
+
+  <section id="intake">
+    <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Choose a photo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-8 8"/></svg>
+      <h2>Choose a photo</h2>
+      <p>From your library or files. JPEG, PNG, WebP or HEIC.</p>
+      <span class="btn btn-primary">Choose Photo</span>
+    </div>
+    <input type="file" id="fileInput" accept="image/*">
+  </section>
+
+  <section id="workspace" hidden>
+    <div style="display:flex;flex-direction:column;gap:1.25rem">
+      <div class="file-bar">
+        <div class="meta"><span class="name" id="fbName"></span><span class="stat" id="fbStat"></span></div>
+        <button class="btn btn-ghost" id="anotherBtn" type="button">Choose another</button>
+      </div>
+
+      <div class="actionbar">
+        <div class="status" id="status" role="status" aria-live="polite"></div>
+        <div class="after" id="afterInfo" hidden></div>
+        <label class="option"><input type="checkbox" id="keepIcc" checked><span><strong>Keep colour profile.</strong> Keeps colours accurate (iPhone photos use a wide-colour profile). It holds no AI, device or location info.</span></label>
+        <div class="actions">
+          <button class="btn btn-primary" id="saveBtn" type="button" disabled>Save Clean Copy</button>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="card preview">
+          <img id="previewImg" alt="Selected photo">
+          <div class="summary" id="summary"></div>
+          <div class="c2pa" id="c2pa" hidden><strong>Content Credentials (C2PA) found.</strong> This photo carries an editing/AI history record, which apps like Instagram read to apply "AI info" labels. The clean copy removes it.</div>
+        </div>
+        <div class="card ledger">
+          <h3 id="ledgerTitle">Hidden information</h3>
+          <div id="ledgerBody"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <details class="howto">
+    <summary>Put this on your iPhone home screen</summary>
+    <ol>
+      <li>Open this page in Safari.</li>
+      <li>Tap the Share button, then <b>Add to Home Screen</b>.</li>
+      <li>Open it from the new icon. It works offline after the first visit.</li>
+    </ol>
+  </details>
+  <footer>Everything runs on your device. Nothing is uploaded or stored.</footer>
+</div>
+
+<script src="vendor/exifr.umd.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  var AI_KEYWORDS = ['midjourney','dall-e','dalle','stable diffusion','stability ai','stability.ai','firefly',
+    'generative fill','generative expand','generative edit','generative ai','runway','openai','chatgpt','sora',
+    'dreamstudio','imagen','leonardo.ai','nightcafe','playground ai','ideogram','flux.1','comfyui','automatic1111',
+    'novelai','image creator','copilot','designer.microsoft','gemini','krea','magnific','recraft','kling',
+    'magic editor','magic eraser','google ai','galaxy ai','apple intelligence','image playground','clean up',
+    'meta ai','trainedalgorithmicmedia','compositewithtrainedalgorithmicmedia','algorithmicmedia',
+    'digitalsourcetype','c2pa','content credentials','ai-generated','ai generated','made with ai'];
+  var SD_KEYWORDS = ['steps:','sampler:','cfg scale','model hash','denoising strength','negative prompt'];
+  var ID_KEYS = ['Make','Model','Software','ProcessingSoftware','HostComputer','Artist','Copyright','OwnerName',
+    'CameraOwnerName','SerialNumber','LensSerialNumber','BodySerialNumber','LensMake','LensModel','CreatorTool',
+    'By-line','Byline','CopyrightNotice','Credit','Source','DocumentID','InstanceID','OriginalDocumentID',
+    'History','Writer-Editor','CaptionWriter','Rating','Creator','Rights'];
+  var CAMERA_KEYS = ['DateTimeOriginal','CreateDate','ModifyDate','DateTimeDigitized','ExposureTime','FNumber','ISO',
+    'FocalLength','Orientation','ImageWidth','ImageHeight','ExifImageWidth','ExifImageHeight','ShutterSpeedValue',
+    'ApertureValue','BrightnessValue','WhiteBalance','Flash','ExposureProgram','MeteringMode','FocalLengthIn35mmFormat',
+    'OffsetTime','OffsetTimeOriginal','OffsetTimeDigitized','SubSecTimeOriginal','SubSecTimeDigitized','SceneType','SensingMethod'];
+  var MAX_CANVAS_PIXELS = 16777216;
+
+  function isLocKey(k){ return /^GPS/i.test(k) || /^(latitude|longitude)$/i.test(k); }
+  function categoryFor(k){
+    if(isLocKey(k)) return 'Location';
+    if(ID_KEYS.indexOf(k) !== -1) return 'Device, software & owner';
+    if(CAMERA_KEYS.indexOf(k) !== -1) return 'Camera & capture';
+    if(/^(Profile|Device(Manufacturer|Model|Attributes)|ColorSpaceData|RenderingIntent|PrimaryPlatform|MediaWhitePoint|MediaBlackPoint|ChromaticAdaptation|Chromaticity|(Red|Green|Blue)(TRC|MatrixColumn)|CMMFlags|ConnectionSpaceIlluminant)/.test(k)) return 'Colour profile';
+    return 'Other';
+  }
+  function flagsFor(k, v){
+    var lk = k.toLowerCase(), lv = v.toLowerCase(), f = [], i;
+    for(i=0;i<AI_KEYWORDS.length;i++){ if(lk.indexOf(AI_KEYWORDS[i])!==-1 || lv.indexOf(AI_KEYWORDS[i])!==-1){ f.push('ai'); break; } }
+    if(f.indexOf('ai')===-1){ for(i=0;i<SD_KEYWORDS.length;i++){ if(lv.indexOf(SD_KEYWORDS[i])!==-1){ f.push('ai'); break; } } }
+    if(ID_KEYS.indexOf(k)!==-1) f.push('id');
+    if(isLocKey(k)) f.push('loc');
+    return f;
+  }
+  function show(v){
+    if(v==null) return '';
+    if(v instanceof Uint8Array || v instanceof ArrayBuffer) return '[binary data, ' + v.byteLength + ' bytes]';
+    if(v instanceof Date){ try{ return v.toLocaleString(); }catch(e){ return String(v); } }
+    if(Array.isArray(v)) return v.map(show).join(', ');
+    if(typeof v === 'object'){ try{ return JSON.stringify(v); }catch(e){ return String(v); } }
+    return String(v);
+  }
+  function esc(s){ return String(s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function size(b){ return b<1024 ? b+' B' : b<1048576 ? (b/1024).toFixed(1)+' KB' : (b/1048576).toFixed(2)+' MB'; }
+  function latin1(bytes){
+    try{ return new TextDecoder('latin1').decode(bytes); }
+    catch(e){ var s='', i, CH=32768; for(i=0;i<bytes.length;i+=CH) s += String.fromCharCode.apply(null, bytes.subarray(i,i+CH)); return s; }
+  }
+  function hasC2PA(bytes){
+    if(bytes.length > 120*1048576) return false;
+    var t = latin1(bytes);
+    return t.indexOf('c2pa') !== -1 || t.indexOf('jumb') !== -1 || t.indexOf('C2PA') !== -1;
+  }
+  function ascii(bytes, pos, str){
+    if(pos + str.length > bytes.length) return false;
+    for(var i=0;i<str.length;i++) if(bytes[pos+i] !== str.charCodeAt(i)) return false;
+    return true;
+  }
+  function detectType(b){
+    if(b[0]===0xFF && b[1]===0xD8 && b[2]===0xFF) return 'jpeg';
+    if(b[0]===0x89 && ascii(b,1,'PNG')) return 'png';
+    if(ascii(b,0,'RIFF') && ascii(b,8,'WEBP')) return 'webp';
+    return 'other';
+  }
+
+  // ---- lossless strippers ----
+
+  function orientationApp1(o){
+    // Minimal EXIF holding only Orientation, so the photo still displays the right way up.
+    return new Uint8Array([0xFF,0xE1,0x00,0x22, 0x45,0x78,0x69,0x66,0x00,0x00,
+      0x4D,0x4D,0x00,0x2A,0x00,0x00,0x00,0x08, 0x00,0x01,
+      0x01,0x12,0x00,0x03,0x00,0x00,0x00,0x01,0x00,o,0x00,0x00, 0x00,0x00,0x00,0x00]);
+  }
+
+  function stripJpeg(b, orientation, keepIcc){
+    var parts = [b.subarray(0,2)];
+    if(orientation >= 2 && orientation <= 8) parts.push(orientationApp1(orientation));
+    var pos = 2, len = b.length;
+    while(pos < len - 1){
+      if(b[pos] !== 0xFF) throw new Error('Unexpected JPEG structure');
+      var m = b[pos+1];
+      if(m === 0xFF){ pos++; continue; }
+      if(m === 0xD9){ parts.push(b.subarray(pos,pos+2)); return new Blob(parts,{type:'image/jpeg'}); }
+      if((m >= 0xD0 && m <= 0xD7) || m === 0x01){ parts.push(b.subarray(pos,pos+2)); pos += 2; continue; }
+      var segLen = (b[pos+2]<<8) | b[pos+3];
+      var end = pos + 2 + segLen;
+      if(end > len) throw new Error('Truncated JPEG');
+      var keep = true;
+      if(m >= 0xE0 && m <= 0xEF){
+        keep = (m === 0xE0 && ascii(b,pos+4,'JFIF\0')) ||
+               (m === 0xE2 && keepIcc && ascii(b,pos+4,'ICC_PROFILE\0')) ||
+               (m === 0xEE && ascii(b,pos+4,'Adobe'));
+      } else if(m === 0xFE){ keep = false; }
+      if(keep) parts.push(b.subarray(pos,end));
+      pos = end;
+      if(m === 0xDA){
+        var p = pos;
+        while(p < len - 1){
+          if(b[p] === 0xFF){
+            var n = b[p+1];
+            if(n === 0x00 || (n >= 0xD0 && n <= 0xD7)){ p += 2; continue; }
+            if(n === 0xFF){ p++; continue; }
+            break;
+          }
+          p++;
+        }
+        parts.push(b.subarray(pos,p));
+        pos = p;
+      }
+    }
+    throw new Error('JPEG ended without an end marker');
+  }
+
+  var PNG_KEEP = ['IHDR','PLTE','IDAT','IEND','tRNS','gAMA','cHRM','sRGB','sBIT','acTL','fcTL','fdAT'];
+  function stripPng(b, keepIcc){
+    var parts = [b.subarray(0,8)], pos = 8, dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+    while(pos + 8 <= b.length){
+      var clen = dv.getUint32(pos), type = String.fromCharCode(b[pos+4],b[pos+5],b[pos+6],b[pos+7]);
+      var end = pos + 12 + clen;
+      if(end > b.length) throw new Error('Truncated PNG');
+      if(PNG_KEEP.indexOf(type) !== -1 || (keepIcc && type === 'iCCP')) parts.push(b.subarray(pos,end));
+      pos = end;
+      if(type === 'IEND') break;
+    }
+    return new Blob(parts,{type:'image/png'});
+  }
+
+  function stripWebp(b, keepIcc){
+    var dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+    var riffEnd = Math.min(b.length, 8 + dv.getUint32(4,true));
+    var chunks = [], pos = 12, vp8xIndex = -1;
+    while(pos + 8 <= riffEnd){
+      var fourcc = String.fromCharCode(b[pos],b[pos+1],b[pos+2],b[pos+3]);
+      var clen = dv.getUint32(pos+4,true);
+      var end = pos + 8 + clen + (clen & 1);
+      if(end > riffEnd) end = riffEnd;
+      var drop = fourcc === 'EXIF' || fourcc === 'XMP ' || (fourcc === 'ICCP' && !keepIcc);
+      if(!drop){
+        var c = b.slice(pos,end);
+        if(fourcc === 'VP8X') vp8xIndex = chunks.length;
+        chunks.push(c);
+      }
+      pos = end;
+    }
+    if(vp8xIndex !== -1){
+      var flags = chunks[vp8xIndex][8];
+      flags &= ~0x08; flags &= ~0x04;
+      if(!keepIcc) flags &= ~0x20;
+      chunks[vp8xIndex][8] = flags;
+    }
+    var bodyLen = 4;
+    chunks.forEach(function(c){ bodyLen += c.length; });
+    var header = new Uint8Array(12);
+    header.set([0x52,0x49,0x46,0x46]);
+    new DataView(header.buffer).setUint32(4, bodyLen, true);
+    header.set([0x57,0x45,0x42,0x50], 8);
+    return new Blob([header].concat(chunks), {type:'image/webp'});
+  }
+
+  // exifr can't read WebP, so pull its EXIF and XMP chunks out by hand.
+  function webpMeta(b){
+    var dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+    var riffEnd = Math.min(b.length, 8 + dv.getUint32(4,true)), pos = 12, out = {tiff:null, xmp:null};
+    while(pos + 8 <= riffEnd){
+      var fourcc = String.fromCharCode(b[pos],b[pos+1],b[pos+2],b[pos+3]);
+      var clen = dv.getUint32(pos+4,true), data = b.subarray(pos+8, Math.min(riffEnd, pos+8+clen));
+      if(fourcc === 'EXIF') out.tiff = ascii(data,0,'Exif\0\0') ? data.subarray(6) : data;
+      if(fourcc === 'XMP ') out.xmp = latin1(data);
+      pos += 8 + clen + (clen & 1);
+    }
+    return out;
+  }
+  function xmpFields(xml){
+    var o = {}, m, re = /([A-Za-z0-9]+):([A-Za-z0-9]+)="([^"]*)"/g;
+    while((m = re.exec(xml))){ if(m[1] !== 'xmlns' && m[1] !== 'x' && m[1] !== 'rdf') o[m[2]] = m[3]; }
+    re = /<([A-Za-z0-9]+):([A-Za-z0-9]+)(?:\s[^>]*)?>([^<]+)<\/\1:\2>/g;
+    while((m = re.exec(xml))){ if(m[3].trim()) o[m[2]] = m[3].trim(); }
+    if(!Object.keys(o).length && xml.trim()) o.XMP = xml.trim();
+    return o;
+  }
+  function readMeta(buf, bytes, type){
+    var opts = {tiff:true, xmp:true, iptc:true, icc:true, jfif:true, ihdr:true, multiSegment:true, mergeOutput:true};
+    if(type !== 'webp') return exifr.parse(buf, opts).catch(function(){ return null; });
+    var w = webpMeta(bytes);
+    var p = w.tiff ? exifr.parse(w.tiff.slice().buffer, opts).catch(function(){ return null; }) : Promise.resolve(null);
+    return p.then(function(meta){
+      meta = meta || {};
+      if(w.xmp){ var x = xmpFields(w.xmp); Object.keys(x).forEach(function(k){ if(!(k in meta)) meta[k] = x[k]; }); }
+      return Object.keys(meta).length ? meta : null;
+    });
+  }
+  function rawAiHit(bytes){
+    if(bytes.length > 120*1048576) return false;
+    var t = latin1(bytes).toLowerCase();
+    for(var i=0;i<AI_KEYWORDS.length;i++) if(AI_KEYWORDS[i].length >= 5 && t.indexOf(AI_KEYWORDS[i]) !== -1) return true;
+    return false;
+  }
+
+  function decodeImage(file){
+    if(window.createImageBitmap){
+      return createImageBitmap(file, {imageOrientation:'from-image'}).catch(function(){ return decodeViaImg(file); });
+    }
+    return decodeViaImg(file);
+  }
+  function decodeViaImg(file){
+    return new Promise(function(resolve, reject){
+      var img = new Image(), url = URL.createObjectURL(file);
+      img.onload = function(){ URL.revokeObjectURL(url); resolve(img); };
+      img.onerror = function(){ URL.revokeObjectURL(url); reject(new Error('This browser can’t open that image format')); };
+      img.src = url;
+    });
+  }
+  function reencode(file){
+    return decodeImage(file).then(function(src){
+      var w = src.naturalWidth || src.width, h = src.naturalHeight || src.height, scale = 1;
+      if(w * h > MAX_CANVAS_PIXELS) scale = Math.sqrt(MAX_CANVAS_PIXELS / (w * h)) * 0.99;
+      var c = document.createElement('canvas');
+      c.width = Math.max(1, Math.floor(w * scale)); c.height = Math.max(1, Math.floor(h * scale));
+      c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
+      return new Promise(function(resolve, reject){
+        c.toBlob(function(blob){ blob ? resolve({blob:blob, resized: scale < 1, w:c.width, h:c.height}) : reject(new Error('Couldn’t encode the image')); }, 'image/jpeg', 0.93);
+      });
+    });
+  }
+
+  // ---- UI ----
+  var $ = function(id){ return document.getElementById(id); };
+  var intake = $('intake'), workspace = $('workspace'), dropzone = $('dropzone'), fileInput = $('fileInput');
+  var saveBtn = $('saveBtn'), statusEl = $('status'), afterInfo = $('afterInfo'), keepIcc = $('keepIcc');
+  var state = {file:null, bytes:null, url:null, type:null, orientation:1, rows:0, clean:null, cleanName:'', job:0};
+
+  function setStatus(msg, kind){ statusEl.textContent = msg || ''; statusEl.className = 'status' + (kind ? ' ' + kind : ''); }
+
+  function badge(f){
+    if(f.indexOf('ai')!==-1) return '<span class="badge b-ai">AI</span>';
+    if(f.indexOf('loc')!==-1) return '<span class="badge b-loc">Location</span>';
+    if(f.indexOf('id')!==-1) return '<span class="badge b-id">Device</span>';
+    return '<span></span>';
+  }
+
+  function renderLedger(meta, c2pa, rawAi){
+    var rows = [];
+    if(meta) Object.keys(meta).forEach(function(k){
+      var v = show(meta[k]);
+      if(v === '') return;
+      if(v.length > 600) v = v.slice(0,600) + '…';
+      var f = flagsFor(k,v);
+      rows.push({k:k, v:v, f:f, cat: f.indexOf('ai') !== -1 ? 'AI & editing tags' : categoryFor(k)});
+    });
+    state.rows = rows.length;
+    var body = $('ledgerBody');
+    body.innerHTML = '';
+    $('ledgerTitle').textContent = rows.length ? rows.length + ' hidden field' + (rows.length===1?'':'s') + ' found' : 'Hidden information';
+    if(!rows.length){ body.innerHTML = '<div class="empty">No readable metadata in this file.</div>'; }
+
+    ['AI & editing tags','Device, software & owner','Location','Camera & capture','Other','Colour profile'].forEach(function(cat){
+      var list = rows.filter(function(r){ return r.cat === cat; });
+      if(!list.length) return;
+      var d = document.createElement('details');
+      d.open = cat === 'AI & editing tags' || cat === 'Device, software & owner' || cat === 'Location';
+      d.innerHTML = '<summary><span>' + esc(cat) + '</span><span class="count">' + list.length + '</span></summary>' +
+        list.map(function(r){ return '<div class="row"><span class="k">' + esc(r.k) + '</span><span class="v">' + esc(r.v) + '</span>' + badge(r.f) + '</div>'; }).join('');
+      body.appendChild(d);
+    });
+
+    var ai = rows.filter(function(r){ return r.f.indexOf('ai')!==-1; }).length;
+    var id = rows.filter(function(r){ return r.f.indexOf('id')!==-1; }).length;
+    var loc = rows.filter(function(r){ return r.f.indexOf('loc')!==-1; }).length;
+    var lines = [];
+    if(ai) lines.push(['var(--flag-ai)', ai + (ai===1 ? ' field mentions AI or an AI editing tool.' : ' fields mention AI or AI editing tools.')]);
+    else if(rawAi) lines.push(['var(--flag-ai)', 'AI-related text found in the file’s hidden data.']);
+    if(id) lines.push(['var(--flag-id)', id + (id===1 ? ' field names the device, app or owner.' : ' fields name the device, app or owner.')]);
+    if(loc) lines.push(['var(--flag-loc)', 'Includes GPS location (' + loc + ' field' + (loc===1?'':'s') + ').']);
+    if(!lines.length && !c2pa) lines.push(['var(--accent)', rows.length ? 'Nothing sensitive flagged.' : 'This photo already looks clean.']);
+    $('summary').innerHTML = lines.map(function(l){ return '<div class="line"><span class="dot" style="background:' + l[0] + '"></span><span>' + esc(l[1]) + '</span></div>'; }).join('');
+    $('c2pa').hidden = !c2pa;
+  }
+
+  function buildClean(){
+    var job = ++state.job;
+    saveBtn.disabled = true;
+    afterInfo.hidden = true;
+    setStatus('Making a clean copy…');
+    var keep = keepIcc.checked;
+    var base = (state.file.name || 'photo').replace(/\.[^/.]+$/, '');
+    var p;
+    try{
+      if(state.type === 'jpeg') p = Promise.resolve({blob: stripJpeg(state.bytes, state.orientation, keep), ext:'jpg'});
+      else if(state.type === 'png') p = Promise.resolve({blob: stripPng(state.bytes, keep), ext:'png'});
+      else if(state.type === 'webp') p = Promise.resolve({blob: stripWebp(state.bytes, keep), ext:'webp'});
+      else p = reencode(state.file).then(function(r){ r.ext = 'jpg'; r.converted = true; return r; });
+    }catch(e){
+      p = reencode(state.file).then(function(r){ r.ext = 'jpg'; r.converted = true; return r; });
+    }
+    p.then(function(r){
+      return r.blob.arrayBuffer().then(function(buf){
+        var bytes = new Uint8Array(buf);
+        return exifr.parse(buf, {tiff:true, xmp:true, iptc:true, icc:false, jfif:false, ihdr:false, mergeOutput:true})
+          .catch(function(){ return null; })
+          .then(function(left){
+            var keys = left ? Object.keys(left).filter(function(k){ return k !== 'Orientation'; }) : [];
+            if(r.ext === 'webp'){
+              var w = webpMeta(bytes);
+              if(w.tiff) keys.push('EXIF');
+              if(w.xmp) keys.push('XMP');
+            }
+            r.remaining = keys.length;
+            r.c2pa = hasC2PA(bytes);
+            return r;
+          });
+      });
+    }).then(function(r){
+      if(job !== state.job) return;
+      state.clean = r.blob;
+      state.cleanName = 'clean-' + base + '.' + r.ext;
+      var notes = ['<span>Before: <b>' + state.rows + '</b> fields</span>',
+                   '<span>After: <b>' + r.remaining + '</b> fields' + (r.c2pa ? ' + C2PA' : '') + '</span>',
+                   '<span>Size: <b>' + size(r.blob.size) + '</b></span>'];
+      if(r.resized) notes.push('<span>Resized to ' + r.w + '×' + r.h + ' to fit browser limits</span>');
+      else if(r.converted) notes.push('<span>Converted to JPEG</span>');
+      afterInfo.innerHTML = notes.join('');
+      afterInfo.hidden = false;
+      if(r.remaining === 0 && !r.c2pa){
+        setStatus(state.orientation >= 2 ? 'Clean copy ready. Only the rotation flag is kept so it displays upright.' : 'Clean copy ready.', 'ok');
+      } else {
+        setStatus('Some metadata could not be removed from this file.', 'err');
+      }
+      saveBtn.disabled = false;
+    }).catch(function(e){
+      if(job !== state.job) return;
+      setStatus((e && e.message) || 'Couldn’t process this photo.', 'err');
+    });
+  }
+
+  function load(file){
+    if(!file) return;
+    if(file.type && file.type.indexOf('image/') !== 0 && !/\.(heic|heif)$/i.test(file.name || '')){
+      setStatus('That file isn’t a photo.', 'err');
+      return;
+    }
+    if(state.url) URL.revokeObjectURL(state.url);
+    state.file = file; state.clean = null; state.url = URL.createObjectURL(file);
+    $('previewImg').src = state.url;
+    $('fbName').textContent = file.name || 'Photo';
+    $('fbStat').textContent = size(file.size);
+    $('summary').innerHTML = ''; $('ledgerBody').innerHTML = ''; $('c2pa').hidden = true;
+    intake.hidden = true; workspace.hidden = false;
+    saveBtn.disabled = true;
+    setStatus('Reading photo…');
+
+    file.arrayBuffer().then(function(buf){
+      state.bytes = new Uint8Array(buf);
+      state.type = detectType(state.bytes);
+      var c2pa = hasC2PA(state.bytes);
+      return Promise.all([
+        readMeta(buf, state.bytes, state.type),
+        state.type === 'jpeg' ? exifr.orientation(buf).catch(function(){ return 1; }) : 1
+      ]).then(function(res){
+        state.orientation = res[1] || 1;
+        renderLedger(res[0], c2pa, rawAiHit(state.bytes));
+        buildClean();
+      });
+    }).catch(function(){ setStatus('Couldn’t read this file.', 'err'); });
+  }
+
+  function save(){
+    if(!state.clean) return;
+    var type = state.clean.type || 'image/jpeg';
+    var f;
+    try{ f = new File([state.clean], state.cleanName, {type:type}); }catch(e){ f = null; }
+    if(f && navigator.canShare && navigator.share && navigator.canShare({files:[f]})){
+      navigator.share({files:[f]}).then(function(){
+        setStatus('Done. If you chose “Save Image” it’s in Photos.', 'ok');
+      }).catch(function(e){
+        if(e && e.name === 'AbortError') return;
+        downloadFallback();
+      });
+      return;
+    }
+    downloadFallback();
+  }
+  function downloadFallback(){
+    var url = URL.createObjectURL(state.clean);
+    var a = document.createElement('a');
+    a.href = url; a.download = state.cleanName;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 60000);
+    setStatus('Saved as ' + state.cleanName + '.', 'ok');
+  }
+
+  function reset(){
+    if(state.url) URL.revokeObjectURL(state.url);
+    state = {file:null, bytes:null, url:null, type:null, orientation:1, rows:0, clean:null, cleanName:'', job:state.job + 1};
+    fileInput.value = '';
+    workspace.hidden = true; intake.hidden = false;
+    setStatus('');
+  }
+
+  dropzone.addEventListener('click', function(){ fileInput.click(); });
+  dropzone.addEventListener('keydown', function(e){ if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); fileInput.click(); } });
+  fileInput.addEventListener('change', function(){ if(fileInput.files[0]) load(fileInput.files[0]); });
+  ['dragenter','dragover'].forEach(function(t){ dropzone.addEventListener(t, function(e){ e.preventDefault(); dropzone.classList.add('drag'); }); });
+  ['dragleave','drop'].forEach(function(t){ dropzone.addEventListener(t, function(){ dropzone.classList.remove('drag'); }); });
+  dropzone.addEventListener('drop', function(e){ e.preventDefault(); if(e.dataTransfer.files[0]) load(e.dataTransfer.files[0]); });
+  document.addEventListener('paste', function(e){
+    var items = (e.clipboardData && e.clipboardData.items) || [];
+    for(var i=0;i<items.length;i++){ if(items[i].type.indexOf('image/') === 0){ load(items[i].getAsFile()); break; } }
+  });
+  $('anotherBtn').addEventListener('click', reset);
+  saveBtn.addEventListener('click', save);
+  keepIcc.addEventListener('change', function(){ if(state.bytes) buildClean(); });
+
+  if('serviceWorker' in navigator && location.protocol === 'https:'){
+    navigator.serviceWorker.register('sw.js').catch(function(){});
+  }
+})();
+</script>
+</body>
+</html>
